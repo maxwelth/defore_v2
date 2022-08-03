@@ -7,7 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/1Mij6-4NMT6FPIpo0FWGMUCn187o68dyM
 """
 
-import stacking-utils as utils
+import stacking_utils as utils
 
 def main(df, WH, pred_date, model_name_list):
 
