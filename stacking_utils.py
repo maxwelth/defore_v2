@@ -10,8 +10,6 @@ Original file is located at
 import pandas as pd
 import numpy as np
 import streamlit as st
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 from datetime import datetime, date, timedelta
 from hijri_converter import Hijri, Gregorian
