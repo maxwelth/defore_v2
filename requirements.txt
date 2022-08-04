@@ -1,7 +1,7 @@
 pip==22.2.2
 catboost==1.0.6
 scikit-learn==1.0.2
-streamlit==0.75
+streamlit==1.11.1
 hijri-converter==2.2.4
 neuralprophet==0.3.2
 prophet==1.1
