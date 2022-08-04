@@ -11,7 +11,7 @@ val_dates = pd.read_csv(r"./resources/validation_dates.csv")['val_dates']
 
 
 coll1,coll2 = st.columns([1,1])
-coll1.image(Image.open(r"./resources/sirclo_logo.png))
+coll1.image(Image.open(r"./resources/sirclo_logo.png"))
 
 st.title("Demand Forecasting Project")
 
