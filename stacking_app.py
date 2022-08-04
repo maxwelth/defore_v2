@@ -7,11 +7,11 @@ from PIL import Image
 import pandas as pd
 import plotly.graph_objs as go
 
-val_dates = pd.read_csv("C:/Users/max/anaconda3/envs/myenv/Defore_v2/data/validation_dates.csv")['val_dates']
+val_dates = pd.read_csv(r"./resources/validation_dates.csv")['val_dates']
 
 
 coll1,coll2 = st.columns([1,1])
-coll1.image(Image.open("C:/Users/max/anaconda3/envs/myenv/Defore_v2/sirclo_logo.png"))
+coll1.image(Image.open(r"./resources/sirclo_logo.png))
 
 st.title("Demand Forecasting Project")
 
