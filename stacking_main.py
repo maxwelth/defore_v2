@@ -9,12 +9,13 @@ Original file is located at
 
 import stacking_utils as utils
 
-def main(df, WH, pred_date, model_name_list):
+def main(df, WH, pred_start, pred_end,val_dates,important_date='No'):
 
-  train_start_date = {'ALL BSD':'2020-11','ALL LEGOK 10K':'2020-10','ALL LEGOK B6, A7':'2021-01','ALL SURABAYA':'2021-09','ALL FF':'2021-11'}
-  future = utils.create_prediction_range(df, pred_date)
-  df = utils.select_wh(df, WH, train_start_date, pred_date)
-
-  result = utils.stack_model(df, future, WH, model_name_list)
+    future = utils.create_prediction_range(pred_start, pred_end)
+    df = utils.select_wh(df, WH)
   
-  return result
+    result = utils.stack_model(df, future, WH)
+    if important_date == 'Yes':
+        result = result[result['ds'].isin(val_dates)]
+    result = utils.final_formatting(result)  
+    return result
