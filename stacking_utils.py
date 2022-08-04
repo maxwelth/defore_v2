@@ -21,13 +21,12 @@ set_log_level("ERROR")
 
 from catboost import CatBoostRegressor
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_percentage_error
 from pandas.tseries.offsets import MonthEnd
 
-from keras.layers import Dense,Dropout,Embedding,LSTM
-from keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.layers import Dense,Dropout,Embedding,LSTM
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.optimizers import Adam, SGD
-from keras.models import Sequential
+from tensorflow.keras.models import Sequential
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -54,16 +53,18 @@ def pre_format(df):
   return df
 
 #Warehouse Filtering
-def select_wh(df, wh, train_start_date, pred_date):
+def select_wh(df, wh):
+  train_start_date = {'ALL BSD':'2020-11','ALL LEGOK 10K':'2020-10','ALL LEGOK B6, A7':'2021-01','ALL SURABAYA':'2021-09','ALL FF':'2021-11'}
+
   df = pre_format(df)
   df = df[df['warehouse_agg'] == wh] 
   df['ds_Ym'] = df['ds'].dt.strftime("%Y-%m")
   df = df[~df.ds.duplicated(keep='first')]
-  df = df[(df['ds_Ym']>=train_start_date[wh])&(df['ds_Ym']<pred_date)]
+  df = df[(df['ds_Ym']>=train_start_date[wh])]
   return df
 
-def create_prediction_range(df, pred_month):
-  range = pd.DataFrame({'ds': pd.date_range(start = pd.to_datetime(str(pred_month) + '-01'), end = pd.to_datetime(str(pred_month) + '-01') + MonthEnd(1))})
+def create_prediction_range(pred_start, pred_end):
+  range = pd.DataFrame({'ds': pd.date_range(start = pd.to_datetime(pred_start), end = pd.to_datetime(pred_end))})
   return range
 
 
@@ -233,7 +234,7 @@ def neuralprophet_model(df, future, events_df):
 
   metrics = m.fit(history_df, freq="D")
 
-  future_np = m.make_future_dataframe(df=history_df, events_df=events_df, periods=future.shape[0], n_historic_predictions=len(df))
+  future_np = m.make_future_dataframe(df=history_df, events_df=events_df, periods=(future['ds'].iloc[-1]-df['ds'].iloc[-1]).days, n_historic_predictions=len(df))
   forecast = m.predict(df=future_np)
   forecast = forecast[forecast['ds'].isin(future['ds'].astype(str).values)]
   return forecast[['ds', 'yhat1']]
@@ -255,10 +256,9 @@ def fe_eng(df):
   return df
   
 #adding lag feature with 1 month shift
-def lagged1M(df, train_start): 
+def lagged1M(df): 
   df['ds-1']= df['ds'] - pd.DateOffset(months=1)
   temp = df[['ds','y']].copy()
-  df = df[df['ds_Ym']>train_start]
   temp.columns = ['ds-1','y-1M']
   hi = pd.merge(df, temp, how='left', on=['ds-1'])
   hi = hi.drop(columns=['ds-1']).dropna()
@@ -280,7 +280,6 @@ def is_twindate(date):
     return False
 
 def tree_based_lstm_split(df, future, WH):
-  train_start_date = {'ALL BSD':'2020-11','ALL LEGOK 10K':'2020-10','ALL LEGOK B6, A7':'2021-01','ALL SURABAYA':'2021-09','ALL FF':'2021-11'}
 
   future['is_tokopedia_promo'] = future['ds'].apply(is_tokopedia)
   future['is_shopee_promo'] = future['ds'].apply(is_shopee)
@@ -291,7 +290,7 @@ def tree_based_lstm_split(df, future, WH):
   df = fe_eng(df)
   future = fe_eng(future)
 
-  df = lagged1M(df, train_start_date[WH])
+  df = lagged1M(df)
 
   future['ds_temp']= future['ds'] - pd.DateOffset(months=1)
   df['ds_temp'] = df['ds']
@@ -372,10 +371,10 @@ def stack_lstm_3x(df, future, WH):
   n_features = 1
   n_steps = X_train.shape[1]
   X_train= X_train.reshape((X_train.shape[0], X_train.shape[1], n_features))
-  X_val= X_test.reshape((X_test.shape[0], X_test.shape[1], n_features))
+  X_test= X_test.reshape((X_test.shape[0], X_test.shape[1], n_features))
 
-  temp = pd.DataFrame(index=range(X_val.shape[0]))
-  temp2 = pd.DataFrame(index=range(X_val.shape[0]))
+  temp = pd.DataFrame(index=range(X_test.shape[0]))
+  temp2 = pd.DataFrame(index=range(X_test.shape[0]))
 
   for i in range(3):    
     y_pred = model_lstm(X_train, y_train, X_test, n_steps, n_features)
@@ -391,7 +390,8 @@ def stack_lstm_3x(df, future, WH):
 #####################################################
 #                         STACK
 ######################################################
-def stack_model(df, future, WH, model_name_list):
+                        
+def stack_model(df, future, WH):
   """
   Parameters:
   df - dataframe yang diperoleh dari select_wh_val()
@@ -414,11 +414,36 @@ def stack_model(df, future, WH, model_name_list):
   merged_lstm_avg = stack_lstm_3x(df, future, WH)
 
   model_name = {"prophet":merged_p, "neural_prophet":merged_np, "rf":merged_rf,"cb":merged_cb,"lstm":merged_lstm_avg}
+  
+  model_name_list = {'ALL BSD':['rf','neural_prophet'],'ALL LEGOK 10K':['rf','prophet'],'ALL LEGOK B6, A7':['lstm','rf','prophet'],'ALL SURABAYA':['lstm','rf','neural_prophet'],'ALL FF':['rf']}  
     
-  merged_stack = [df.set_index(['ds']) for df in map(model_name.get, model_name_list)]
+  merged_stack = [df.set_index(['ds']) for df in map(model_name.get, model_name_list[WH])]
   stack = pd.concat(merged_stack, axis=1).reset_index()
   stack['y_avg'] = stack.drop(columns=['ds']).mean(axis=1)
-  stack = stack[stack['ds'].isin(val_dates)]
-
+    
   return stack
 
+def final_formatting(df):
+    df['ds'] = df['ds'].dt.strftime('%Y-%m-%d')
+    final_df = df[['ds','y_avg']].reset_index(drop=True)
+    final_df.columns = ['Date','Sales Forecast']
+    return final_df
+
+def plot_twin(df):
+    df = pre_format(df)
+    df['flag_twin'] = df['ds'].apply(lambda x: 1 if 
+    x.day == x.month else 0)
+    df_temp = df[df['flag_twin']==1].reset_index(drop=True)
+    df_temp['ds'] = df_temp['ds'].strptime('%Y-%m-%d')
+    df_temp = df_temp[['ds','y']]
+    return df_temp
+
+def plot_payday(df):
+    df = pre_format(df)
+    df['flag_payday'] = df['ds'].apply(lambda x: 1 if 
+    x.day == 25 else 0)
+    df_temp = df[df['flag_payday']==1].reset_index(drop=True)
+    df_temp['ds'] = df_temp['ds'].strptime('%Y-%m-%d')
+    df_temp = df_temp[['ds','y']]
+    return df_temp
+    
